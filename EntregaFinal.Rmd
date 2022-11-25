@@ -1,0 +1,446 @@
+---
+title: "INNFORME FINAL"
+author: "Danny Rodriguez, Ronys Davila, Jeferson Abril, Fabian Martinez"
+date: "2022-11-21"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 3nd Report guideline: \"Supervised learning final project\"
+
+# Objetivos
+
+Desarrollar un robot movil para la adquisición de datos mediante tres sensores utilizando un microcontrolador y con esto desarrollar los modelos predictivos vistos en clase.
+
+## Resumen 
+
+Se crea un robot móvil con la capacidad de movilizarse en tres entornos creados con cartón paja, se le adaptaron tres sensores, dos de proximidad y una fotocelda, este robot fue programado a través de arduino se utilizaron dos motores, un puente H, baterías y una placa de arduinoMega.
+Luego de esto se hizo la recepción de datos atreves del puerto serial obteniendo 50 datos distintos y almacenándolos en un Excel para el tratamiento en los diferentes modelos vistos en Rstudio.
+
+## Procedimiento para modelos predictivos
+
+Se construyo un robot movil, utilizando la placa arduino como se ve en la siguiente imagen.
+
+![Foto_del_Robot](panoramicacarro.jpg){width="380" height="278"}
+
+![Ambientes](ambientes.jpg){width="265"}
+
+luego de esto se paso a instalar 2 sensores de distancia y una fotocelda para que leer el entorno donde se encuentra como se ve en la siguiente imagen
+
+![Sensores](sensores.jpg){width="271"}
+
+El Codigo que se utilizo en arduino es el siguiente.
+
+![Programacion_Robot](codigoarduino.PNG)
+
+para este experimento creamos tres entornos una caja pequeña sin techo, una caja media con techo, y una caja grande con huecos en el techo, comenzamos a mover el robot por estos tres entornos diferentes y a atraves del monitor serial leemos los datos como se muestra en la siguiente imagen.
+
+![Data-Frame1](dataframe1.PNG)
+
+Luego de tener el data-frame creado vamos a realizar el entrenamiento para los modelos vistos en clase.
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(readr)
+library(class)
+library(gmodels)
+#library(e1071)
+library(rpart)
+#library(randomForest)
+
+
+dataframe <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataExcel.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+plot(dataframe[1:4])
+summary(dataframe)
+```
+
+Aca podemos ver algunas de las caracteristicas de nuestros predictores y nuestro valor a predecir,ademas de obtener el valor minimo, maximo la media y el promedio.
+
+# Metodo Multilineal
+
+```{r warning=FALSE, message=FALSE}
+
+dataframe <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataExcel.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+#hold-out cross-validation
+sample.index <- sample(1:nrow(dataframe)
+                       
+                       , nrow(dataframe) * 0.75, replace = FALSE)
+
+training.data <-dataframe[sample.index,, drop=F]
+test.data<- dataframe[-sample.index,, drop=F]
+#creating a model with 4 predictors
+model3 <- lm(ambiente~sensor1+sensor2+sensor3,training.data)
+
+# Make predictions and compute the R2, RMSE and MAE using CARET
+predictions <- model3 %>% predict(test.data)
+data.frame( R2 = R2(predictions, test.data$ambiente),
+            RMSE = RMSE(predictions, test.data$ambiente),
+            MAE = MAE(predictions, test.data$ambiente))
+
+predict(model3,test.data)
+#--------------------------------------------------------------------#
+# Define training control
+set.seed(1)
+train.control <- trainControl(method = "cv", number = 10)
+# Train the model
+model3 <- train(ambiente~sensor1+sensor2+sensor3, data = dataframe, method = "lm",
+                trControl = train.control)
+
+# Summarize the results
+print(model3)
+
+prueba <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/prueba.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+predict(model3,prueba)
+
+```
+
+En este metodo como valor a predecir tenemos una variable numerica por eso en los resultados en el test-data podemos ver como los valores que predicen son numeros entre 0 y 3, podemos deducir que entre mas cerca este a un valor ese es el valor que predice.
+
+# Metodo Knn
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(readr)
+library(class)
+library(gmodels)
+library(e1071)
+#leo mi datframe
+dataframe2 <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataframe2.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+#--Funcion de normalizacion---#
+normalise <- function(x){
+  return((x-min(x))/(max(x)-min(x)))
+}
+#----Cambio a factor mi clase----#
+dataframe2$ambiente <-
+  as.factor(dataframe2$ambiente)
+#---miro las proporciones de mi datframe-#
+prop.table(table(dataframe2$ambiente))
+#-----#
+hist(dataframe2$`sensor1`, breaks = 50)
+hist(dataframe2$`sensor2`, breaks = 50)
+hist(dataframe2$`sensor3`, breaks = 50)
+#--normalizo las variables--#
+normData <- dataframe2
+standardData <- dataframe2
+#--minmax--#
+### min-max
+normData$sensor1 <-
+  normalise(dataframe2$sensor1)
+normData$sensor2 <-
+  normalise(dataframe2$`sensor2`)
+normData$sensor3 <-
+  normalise(dataframe2$`sensor3`)
+#-- z- score-#
+standardData$sensor1 <-
+  scale(dataframe2$`sensor1`)
+standardData$sensor2 <-
+  scale(dataframe2$`sensor2`)
+standardData$sensor3 <-
+  scale(dataframe2$`sensor3`)
+```
+
+Luego de esto pasamos a realizar nuestros modelos para los tres modelos creados en Knn.
+
+el primero es el dataframe sin ningun tratamiento
+
+```{r warning=FALSE, message=FALSE}
+#----Parto mi dataframe----#
+sample.index <- sample(1:nrow(dataframe2)
+                       ,nrow(dataframe2)*0.7
+                       ,replace = F)
+
+#--entrenamiento y test---#
+k <- 5
+predictors <- c("sensor1","sensor2","sensor3")
+
+# original data
+train.data <-dataframe2[sample.index,c(predictors,"ambiente"),drop=F]
+test.data <-dataframe2[-sample.index,c(predictors,"ambiente"),drop=F]
+#-- cargo mi clase library---#
+prediction <- knn(train = train.data[predictors], test = test.data[predictors],cl = train.data$ambiente, k=k)
+#---Gmoldes---#
+
+CrossTable(x = test.data$ambiente, y = prediction
+           
+           , prop.chisq = F)
+
+```
+
+El segundo es para el metodo normalizado.
+
+```{r warning=FALSE, message=FALSE}
+#--------Normalizado--------#
+
+train.data <-normData[sample.index,c(predictors,"ambiente"),drop=F]
+test.data <-normData[-sample.index,c(predictors,"ambiente"),drop=F]
+#-- cargo mi clase library---#
+prediction <- knn(train = train.data[predictors]
+                  
+                  , test = test.data[predictors]
+                  ,cl = train.data$ambiente, k=k)
+#---Gmoldes---#
+CrossTable(x = test.data$ambiente, y = prediction
+           
+           , prop.chisq = F)
+
+
+
+```
+
+Y por ultimo el z-score
+
+```{r warning=FALSE, message=FALSE}
+
+#-----------StandarDAta--------#
+
+train.data <-standardData[sample.index,c(predictors,"ambiente"),drop=F]
+test.data <-standardData[-sample.index,c(predictors,"ambiente"),drop=F]
+#-- cargo mi clase library---#
+prediction <- knn(train = train.data[predictors]
+                  
+                  , test = test.data[predictors]
+                  ,cl = train.data$ambiente, k=k)
+#---Gmoldes---#
+CrossTable(x = test.data$ambiente, y = prediction
+           
+           , prop.chisq = F)
+
+```
+
+Podemos concluir de este metodo que es bastante preciso con los tres metodos que se realizaron, ademas de tener unos buenos predictores para nuestra clase.
+
+# Metodo Logistic and multinomial regression.
+
+```{r warning=FALSE, message=FALSE}
+dataframe2 <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataframe2.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+##creo mis dummy var variable clase
+dataframe2$iscaja1 <- dataframe2$ambiente=="caja 1"
+dataframe2$iscaja2 <- dataframe2$ambiente=="caja 2"
+dataframe2$iscaja3 <- dataframe2$ambiente=="caja 3"
+
+##parto el dataframe cross validacion
+train_index <- sample(1:nrow(dataframe2)
+                      ,nrow(dataframe2)*0.7
+                      ,replace = F)
+train.data<-dataframe2[train_index,]
+test.data<-dataframe2[-train_index,]
+
+#Entrenar los regresores logisticos para caja 1
+caja1Classifier<-glm(iscaja1~sensor1+sensor2+sensor3
+                     ,data = train.data
+                     ,family = "binomial")
+#Entrenar los regresores logisticos para caja 2
+caja2Classifier<-glm(iscaja2~sensor1+sensor2+sensor3,
+                     data=train.data, 
+                     family = "binomial")
+#Entrenar los regresores logisticos para caja 3
+
+caja3Classifier<-glm(iscaja3~sensor1+sensor2+sensor3,
+                     data=train.data, 
+                     family = "binomial")
+
+
+#Predecir la clase de los datos de prueba
+
+
+aux<- predict(caja1Classifier
+              ,test.data
+              ,tipe= "response")
+prediciones<-data.frame(caja1=aux)
+
+prediciones$caja1<-predict(caja1Classifier
+                           ,test.data
+                           ,type="response")
+
+prediciones$caja2<-predict(caja2Classifier
+                           ,test.data
+                           ,type="response")
+prediciones$caja3<-predict(caja3Classifier
+                           ,test.data
+                           ,type="response")
+
+
+colnames(prediciones)[max.col(prediciones)]
+
+```
+
+Este es el primer metodo que utilizamos para variables binomiales podemos ver como en el data-frame nos responde si es de una clase o no luego de esto lo hicimos con caret la multinomial.
+
+```{r warning=FALSE, message=FALSE}
+#con Caret
+
+
+set.seed(123)
+
+fit.control<-trainControl(method = "cv"
+                          , number = 10)
+
+fit <- train(ambiente ~ sensor1+sensor2+sensor3, data = dataframe2
+             
+             , method = "multinom", trControl = fit.control, trace = FALSE)
+
+fit
+
+
+predicted.class<-predict(fit, test.data, type = "prob")
+colnames(predicted.class)[max.col(predicted.class)]
+
+
+
+mlogit.prob <- predict(fit, test.data, type = "prob")
+predicted.class <- colnames(mlogit.prob)[max.col(mlogit.prob)]
+predicted.class
+
+
+#----Para ingresar nuevos Datos---#
+prueba <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/prueba.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+
+colnames(prueba)<-colnames(dataframe2)[1:3]
+
+predict(fit, prueba, type="prob")
+
+
+```
+
+Al final con el dataframe hacemos una prueba y el nos predice muy bien la caja 1 y 3.
+
+# Metodo Decision trees and random forest
+
+En este metodo comenzamos con el arbol basico de decision
+
+```{r warning=FALSE, message=FALSE}
+
+dataframe2 <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataframe2.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+##parto el dataframe cross validacion
+train_index <- sample(1:nrow(dataframe2)
+                      ,nrow(dataframe2)*0.7
+                      ,replace = F)
+train.data<-dataframe2[train_index,]
+test.data<-dataframe2[-train_index,]
+
+fit<-rpart(ambiente~sensor1+sensor2+sensor3
+           ,method="class"
+           ,data = train.data )
+predict(fit,test.data)
+
+
+plot(fit,uniform=T,margin=0.1)
+text(fit,use.n=TRUE, all= TRUE, cex= 0.8)
+rpart.plot::rpart.plot(fit)
+
+
+prueba <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/prueba.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+predict(fit,prueba)
+
+
+
+```
+
+Como podemos ver en este metodo nos crea un arbol donde nos da ciertas caracteristicas para que sea un entorno o otro en este caso el sensor 1 y luego de esto hacemos la prueba con unos datos que hemos conseguido aleatoriamente obteniendo un resultado muy preciso.
+
+## Random forest
+
+![](random_forest1.PNG)
+
+# ![](random_forest2.PNG)
+![](resultado1random.PNG)
+
+![](resultado2.PNG)
+
+# Metodo Support vector Machines
+
+```{r warning=FALSE, message=FALSE}
+
+dataframe2 <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataframe2.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+dataframe2$ambiente <-
+  as.factor(dataframe2$ambiente)
+
+##parto el dataframe cross validacion
+train_index <- sample(1:nrow(dataframe2)
+                      ,nrow(dataframe2)*0.7
+                      ,replace = F)
+
+train.data<-dataframe2[train_index,]
+test.data<-dataframe2[-train_index,]
+
+#clasification_mode
+#default with factorresponse(cost=1)
+
+model<-svm(ambiente~sensor1+sensor2+sensor3, data=train.data)
+print(model)
+summary(model)
+
+#test with train data
+
+pred<-predict(model,test.data)
+pred
+#check accuracy
+table(pred, test.data$ambiente)
+
+#increasing C to make the margin narrower
+model<-svm(ambiente~sensor1+sensor2+sensor3, data=train.data,cost=100)
+print(model)
+summary(model)
+pred<-predict(model,test.data)
+pred
+#check accuracy
+table(pred, test.data$ambiente)
+
+```
+
+# 
+Metodo Naive Bayes Classifier
+
+```{r warning=FALSE, message=FALSE}
+
+dataframe2 <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/dataframe2.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+##parto el dataframe cross validacion
+train_index <- sample(1:nrow(dataframe2)
+                      ,nrow(dataframe2)*0.7
+                      ,replace = F)
+
+train.data<-dataframe2[train_index,]
+test.data<-dataframe2[-train_index,]
+
+nb.model<-naiveBayes(ambiente~.,data=train.data , laplace=1)
+prediction.nb<- predict(nb.model, test.data, type= "class")
+table(test.data$ambiente, prediction.nb)
+caret::confusionMatrix(prediction.nb,as.factor(test.data$ambiente))
+
+prueba <- read_delim("C:/Users/admin/Documents/Universidad/electiva//dataframe3/prueba.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+predict(nb.model,prueba)
+
+
+```
+
+# 
+
+
